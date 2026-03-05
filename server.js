@@ -55,6 +55,8 @@ app.use(express.json());
 const connectDb = require(path.join(__dirname, "src", "config", "db_Connect"));
 connectDb();
 
+const seedDirector = require(path.join(__dirname, "src", "utils", "seedDirector"));
+seedDirector();
 const swaggerSpec = require("./src/config/swagger");
 const procurementRoutes = require(path.join(__dirname, "src", "routes", "procurementRoutes"));
 const salesRoutes = require(path.join(__dirname, "src", "routes", "salesRoutes"));
