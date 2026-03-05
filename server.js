@@ -43,8 +43,9 @@ const corsOptions = {
 
 // Apply CORS middleware to all routes.
 app.use(cors(corsOptions));
-// Explicitly handle browser preflight (OPTIONS) requests.
-app.options("*", cors(corsOptions));
+// Explicitly handle browser preflight (OPTIONS) requests on all paths.
+// Use "/*" (not "*") to avoid Express 5 path parsing errors.
+app.options("/*", cors(corsOptions));
 app.disable("x-powered-by");
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
