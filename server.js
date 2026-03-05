@@ -15,27 +15,36 @@ REQUIRED_ENV.forEach((key) => {
 
 const app = express();
 
-const explicitAllowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
-  : [];
+// Frontend URL hosted on GitHub Pages.
+const FRONTEND_ORIGIN = "https://panom-kaidit.github.io";
 
-const devOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
-const isAllowedOrigin = (origin) =>
-  explicitAllowedOrigins.includes(origin) || devOriginPattern.test(origin);
+// In production, allow only the deployed frontend.
+// In development, also allow local frontend URLs.
+const allowedOrigins =
+  process.env.NODE_ENV === "production"
+    ? [FRONTEND_ORIGIN]
+    : [FRONTEND_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"];
 
 const corsOptions = {
+  // Validate the request Origin before adding CORS headers.
   origin: (origin, callback) => {
+    // Allow non-browser tools (like curl/Postman) that may not send Origin.
     if (!origin) return callback(null, true);
-    if (isAllowedOrigin(origin)) return callback(null, true);
-    return callback(null, false);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error("Not allowed by CORS"));
   },
+  // Allowed HTTP methods for cross-origin requests.
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  // Allowed request headers sent by the frontend.
   allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: false,
+  // Return 204 for successful preflight response.
   optionsSuccessStatus: 204
 };
 
+// Apply CORS middleware to all routes.
 app.use(cors(corsOptions));
+// Explicitly handle browser preflight (OPTIONS) requests.
+app.options("*", cors(corsOptions));
 app.disable("x-powered-by");
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
