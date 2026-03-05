@@ -27,7 +27,9 @@ const userSchema = new mongoose.Schema({
   },
   branch: {
     type: String,
-    enum: ["Maganjo", "Matugga"]
+    enum: ["Maganjo", "Matugga","Main"],
+    default: "Main",
+    required: true
   },
   phone: {
     type: String,
