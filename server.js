@@ -23,7 +23,7 @@ const FRONTEND_ORIGIN = "https://panom-kaidit.github.io";
 const allowedOrigins =
   process.env.NODE_ENV === "production"
     ? [FRONTEND_ORIGIN]
-    : [FRONTEND_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"];
+    : [FRONTEND_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000", "https://karibu-gl.netlify.app/"];
 
 const corsOptions = {
   // Validate the request Origin before adding CORS headers.
