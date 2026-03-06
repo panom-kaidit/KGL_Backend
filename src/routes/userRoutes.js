@@ -93,12 +93,12 @@ router.post("/login", async (req, res) => {
     if (!user) {
       // Use the same message for both "not found" and "wrong password" to
       // prevent user enumeration attacks
-      return res.status(401).json({ message: "Invalid credentials" });
+      return res.status(401).json({ message: "Invalid email or password" });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      return res.status(401).json({ message: "Invalid email or password" });
     }
 
     const token = jwt.sign(
