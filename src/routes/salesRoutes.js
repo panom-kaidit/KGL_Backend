@@ -28,12 +28,33 @@ router.get(
   authorizeRole(["Manager", "Director"]),
   async (req, res) => {
     try {
-      const branch = req.user.branch;
-      if (!branch) {
+      const callerRole = req.user.role;
+      const callerBranch = req.user.branch;
+      const { branch, category, startDate, endDate } = req.query;
+
+      if (callerRole === "Manager" && !callerBranch) {
         return res.status(400).json({ message: "No branch assigned to your account" });
       }
 
-      const sales = await Sale.find({ branch })
+      const filters = {};
+
+      if (callerRole === "Manager") {
+        filters.branch = callerBranch;
+      } else if (branch && branch !== "all") {
+        filters.branch = branch;
+      }
+
+      if (category && category !== "all") {
+        filters.$or = [{ produceType: category }, { produceName: category }];
+      }
+
+      if (startDate || endDate) {
+        filters.date = {};
+        if (startDate) filters.date.$gte = startDate;
+        if (endDate) filters.date.$lte = endDate;
+      }
+
+      const sales = await Sale.find(filters)
         .populate("recordedBy", "name")
         .sort({ date: -1, time: -1 })
         .lean();

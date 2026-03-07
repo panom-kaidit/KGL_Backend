@@ -57,9 +57,25 @@ exports.getAllCreditSales = async (req, res) => {
       return res.status(400).json({ message: "Your account has no branch assigned." });
     }
 
+    const { branch, category, startDate, endDate } = req.query;
     const scopeFilter = await buildScopeFilter(req.user);
+    const filters = { saleType: "credit", ...scopeFilter };
 
-    const credits = await Sale.find({ saleType: "credit", ...scopeFilter })
+    if (req.user.role === "Director" && branch && branch !== "all") {
+      filters.branch = branch;
+    }
+
+    if (category && category !== "all") {
+      filters.$or = [{ produceType: category }, { produceName: category }];
+    }
+
+    if (startDate || endDate) {
+      filters.date = {};
+      if (startDate) filters.date.$gte = startDate;
+      if (endDate) filters.date.$lte = endDate;
+    }
+
+    const credits = await Sale.find(filters)
       .populate("recordedBy", "name")
       .sort({ date: -1 })
       .lean();
