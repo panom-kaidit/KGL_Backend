@@ -139,3 +139,134 @@ exports.getAgentDashboardSummary = async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 };
+
+exports.getSalesBreakdownSummary = async (req, res) => {
+  try {
+    if (!["Manager", "Director"].includes(req.user.role)) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const { branch, category, startDate, endDate } = req.query;
+    const filters = {};
+
+    if (req.user.role === "Manager") {
+      if (!req.user.branch) {
+        return res.status(400).json({ message: "No branch assigned to your account" });
+      }
+      filters.branch = req.user.branch;
+    } else if (branch && branch !== "all") {
+      filters.branch = branch;
+    }
+
+    if (category && category !== "all") {
+      filters.$or = [{ produceType: category }, { produceName: category }];
+    }
+
+    if (startDate || endDate) {
+      filters.date = {};
+      if (startDate) filters.date.$gte = startDate;
+      if (endDate) filters.date.$lte = endDate;
+    }
+
+    const rows = await Sale.aggregate([
+      { $match: filters },
+      {
+        $addFields: {
+          category: {
+            $trim: { input: { $ifNull: ["$produceType", "$produceName"] } }
+          },
+          productName: {
+            $trim: { input: { $ifNull: ["$produceName", "$produceType"] } }
+          },
+          paymentHistoryTotal: {
+            $sum: {
+              $map: {
+                input: { $ifNull: ["$paymentHistory", []] },
+                as: "payment",
+                in: { $ifNull: ["$$payment.amount", 0] }
+              }
+            }
+          }
+        }
+      },
+      {
+        $addFields: {
+          lineRevenue: {
+            $cond: [
+              { $eq: ["$saleType", "credit"] },
+              {
+                $let: {
+                  vars: {
+                    creditTotal: {
+                      $add: [
+                        { $ifNull: ["$amountDue", 0] },
+                        { $ifNull: ["$paymentHistoryTotal", 0] }
+                      ]
+                    }
+                  },
+                  in: {
+                    $cond: [
+                      { $gt: ["$$creditTotal", 0] },
+                      "$$creditTotal",
+                      {
+                        $multiply: [
+                          { $ifNull: ["$tonnage", 0] },
+                          { $ifNull: ["$pricePerKg", 0] }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                $cond: [
+                  { $gt: [{ $ifNull: ["$amountPaid", 0] }, 0] },
+                  { $ifNull: ["$amountPaid", 0] },
+                  {
+                    $multiply: [
+                      { $ifNull: ["$tonnage", 0] },
+                      { $ifNull: ["$pricePerKg", 0] }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            category: { $ifNull: ["$category", "Uncategorized"] },
+            productName: { $ifNull: ["$productName", "Unknown Product"] }
+          },
+          unitsSold: { $sum: { $ifNull: ["$tonnage", 0] } },
+          totalRevenue: { $sum: { $ifNull: ["$lineRevenue", 0] } }
+        }
+      },
+      { $sort: { totalRevenue: -1, "_id.category": 1, "_id.productName": 1 } }
+    ]);
+
+    const grandTotal = rows.reduce((sum, row) => sum + Number(row.totalRevenue || 0), 0);
+    const data = rows.map((row) => {
+      const totalRevenue = Math.round(Number(row.totalRevenue || 0));
+      const percent = grandTotal > 0 ? (totalRevenue / grandTotal) * 100 : 0;
+
+      return {
+        category: row._id.category || "Uncategorized",
+        productName: row._id.productName || "Unknown Product",
+        unitsSold: Number(row.unitsSold || 0),
+        totalRevenue,
+        percent: Number(percent.toFixed(1))
+      };
+    });
+
+    return res.status(200).json({
+      totalRevenue: Math.round(grandTotal),
+      count: data.length,
+      data
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Server error" });
+  }
+};

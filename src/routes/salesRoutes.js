@@ -5,11 +5,20 @@ const Sale = require("../models/sales");
 const Pricing = require("../models/Pricing");
 const Inventory = require("../models/Inventory");
 const { decreaseStock } = require("../services/inventoryService");
-const { getAgentDashboardSummary } = require("../controllers/salesController");
+const {
+  getAgentDashboardSummary,
+  getSalesBreakdownSummary
+} = require("../controllers/salesController");
 
 const router = express.Router();
 
 router.get("/dashboard", authMiddleware, getAgentDashboardSummary);
+router.get(
+  "/summary/breakdown",
+  authMiddleware,
+  authorizeRole(["Manager", "Director"]),
+  getSalesBreakdownSummary
+);
 
 router.get("/history", authMiddleware, async (req, res) => {
   try {
