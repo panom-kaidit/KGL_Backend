@@ -1,5 +1,42 @@
 const User = require("../models/User");
 
+exports.getVisibleUsers = async (req, res) => {
+  try {
+    let users = [];
+    let branch = null;
+
+    if (req.user.role === "Director") {
+      users = await User.find({})
+        .select("-password")
+        .sort({ name: 1 })
+        .lean();
+    } else if (req.user.role === "Manager") {
+      branch = req.user.branch;
+
+      if (!branch) {
+        return res.status(400).json({
+          message: "Your account has no branch assigned. Please contact a Director."
+        });
+      }
+
+      users = await User.find({ branch })
+        .select("-password")
+        .sort({ name: 1 })
+        .lean();
+    } else {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    return res.status(200).json({
+      branch,
+      count: users.length,
+      data: users
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
 /**
  * GET /users/branch
  *

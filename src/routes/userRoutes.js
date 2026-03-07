@@ -4,7 +4,7 @@ const jwt           = require("jsonwebtoken");
 const User          = require("../models/User");
 const authMiddleware = require("../middlewares/authMiddleware");
 const authorizeRole  = require("../middlewares/rbaMiddleware");
-const { getBranchUsers } = require("../controllers/userController");
+const { getBranchUsers, getVisibleUsers } = require("../controllers/userController");
 
 const router = express.Router();
 
@@ -76,6 +76,9 @@ router.post("/register", authMiddleware, async (req, res) => {
     return res.status(201).json({ message: "User created successfully" });
 
   } catch (error) {
+    if (error.name === "ValidationError") {
+      return res.status(400).json({ message: "Invalid user details provided." });
+    }
     return res.status(500).json({ message: "Server error" });
   }
 });
@@ -110,13 +113,17 @@ router.post("/login", async (req, res) => {
     return res.status(200).json({ message: "Login successful", token });
 
   } catch (error) {
+    if (error.name === "ValidationError") {
+      return res.status(400).json({ message: "Invalid user details provided." });
+    }
     return res.status(500).json({ message: "Server error" });
   }
 });
 
 // ── GET /users/branch ────────────────────────────────────────────────────────
-// Manager sees only their own branch's users (branch from JWT, never from query).
-// Must be before /:id to prevent "branch" being captured as an id.
+// Director sees all users. Manager sees only their own branch's users.
+// Must be before /:id to prevent static paths being captured as an id.
+router.get("/", authMiddleware, getVisibleUsers);
 router.get("/branch", authMiddleware, authorizeRole("Manager"), getBranchUsers);
 
 // ── PUT /users/:id ───────────────────────────────────────────────────────────
@@ -127,30 +134,88 @@ router.put("/:id", authMiddleware, async (req, res) => {
   try {
     const targetId = req.params.id;
     const caller   = req.user;
+    const isSelf   = targetId === String(caller.id);
+    const targetUser = await User.findById(targetId);
 
-    // Ownership check — only self or Director
-    if (targetId !== String(caller.id) && caller.role !== "Director") {
-      return res.status(403).json({ message: "Access denied: you may only update your own profile" });
-    }
-
-    const { bio, profilePicture } = req.body;
-
-    const updateFields = {};
-    if (bio !== undefined)            updateFields.bio            = bio;
-    if (profilePicture !== undefined) updateFields.profilePicture = profilePicture;
-
-    const user = await User.findByIdAndUpdate(
-      targetId,
-      { $set: updateFields },
-      // Use returnDocument:'after' to return the updated document (replaces new:true).
-      { returnDocument: "after" }
-    ).select("-password");
-
-    if (!user) {
+    if (!targetUser) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    return res.status(200).json(user);
+    let allowedFields = [];
+
+    if (caller.role === "Director") {
+      allowedFields = ["name", "email", "role", "branch", "phone", "bio", "profilePicture"];
+    } else if (caller.role === "Manager") {
+      const sameBranchUser = targetUser.branch === caller.branch;
+      const managedUser = sameBranchUser && targetUser.role === "Sales-agent";
+
+      if (!isSelf && !managedUser) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      allowedFields = ["name", "email", "phone", "bio", "profilePicture"];
+    } else if (!isSelf) {
+      return res.status(403).json({ message: "Access denied: you may only update your own profile" });
+    } else {
+      allowedFields = ["bio", "profilePicture"];
+    }
+
+    const updateFields = {};
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        updateFields[field] = req.body[field];
+      }
+    });
+
+    if (updateFields.email) {
+      updateFields.email = String(updateFields.email).trim().toLowerCase();
+      const existing = await User.findOne({
+        email: updateFields.email,
+        _id: { $ne: targetId }
+      }).lean();
+
+      if (existing) {
+        return res.status(400).json({ message: "User already exists" });
+      }
+    }
+
+    Object.assign(targetUser, updateFields);
+    await targetUser.save();
+
+    const safeUser = targetUser.toObject();
+    delete safeUser.password;
+
+    return res.status(200).json(safeUser);
+  } catch (error) {
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.delete("/:id", authMiddleware, async (req, res) => {
+  try {
+    const targetId = req.params.id;
+    const caller = req.user;
+
+    if (targetId === String(caller.id)) {
+      return res.status(400).json({ message: "You cannot delete your own account." });
+    }
+
+    const targetUser = await User.findById(targetId).select("role branch").lean();
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (caller.role === "Manager") {
+      const sameBranchUser = targetUser.branch === caller.branch;
+      if (!sameBranchUser || targetUser.role !== "Sales-agent") {
+        return res.status(403).json({ message: "Access denied" });
+      }
+    } else if (caller.role !== "Director") {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    await User.findByIdAndDelete(targetId);
+    return res.status(200).json({ message: "User deleted successfully" });
   } catch (error) {
     return res.status(500).json({ message: "Server error" });
   }
