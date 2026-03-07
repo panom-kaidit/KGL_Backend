@@ -15,15 +15,14 @@ REQUIRED_ENV.forEach((key) => {
 
 const app = express();
 
-// Frontend URL hosted on GitHub Pages.
-const FRONTEND_ORIGIN = "https://panom-kaidit.github.io";
-
-// In production, allow only the deployed frontend.
-// In development, also allow local frontend URLs.
-const allowedOrigins =
-  process.env.NODE_ENV === "production"
-    ? [FRONTEND_ORIGIN]
-    : [FRONTEND_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000", "https://karibu-gl.netlify.app"];
+const allowedOrigins = [
+  "https://panom-kaidit.github.io",
+  "https://karibu-gl.netlify.app",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173"
+];
 
 const corsOptions = {
   // Validate the request Origin before adding CORS headers.
@@ -37,6 +36,7 @@ const corsOptions = {
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   // Allowed request headers sent by the frontend.
   allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
   // Return 204 for successful preflight response.
   optionsSuccessStatus: 204
 };

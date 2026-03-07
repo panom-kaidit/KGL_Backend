@@ -157,9 +157,14 @@ exports.makePayment = async (req, res) => {
   try {
     const { id } = req.params;
     const { paymentAmount } = req.body;
+    const userBranch = String(req.user.branch || "").trim();
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid sale ID" });
+    }
+
+    if (!userBranch) {
+      return res.status(400).json({ message: "Your account has no branch assigned." });
     }
 
     const amount = Number(paymentAmount);
@@ -168,70 +173,54 @@ exports.makePayment = async (req, res) => {
     }
 
     const roundedAmount = Math.round(amount * 100) / 100;
+    const sale = await Sale.findById(id);
 
-    const updated = await Sale.findOneAndUpdate(
-      {
-        _id: id,
-        saleType: "credit",
-        status: { $in: ["pending", "partial"] },
-        amountDue: { $gte: roundedAmount }
-      },
-      [
-        {
-          $set: {
-            amountDue: { $subtract: ["$amountDue", roundedAmount] }
-          }
-        },
-        {
-          $set: {
-            status: {
-              $cond: {
-                if: { $lte: ["$amountDue", 0] },
-                then: "paid",
-                else: "partial"
-              }
-            },
-            paymentHistory: {
-              $concatArrays: [
-                "$paymentHistory",
-                [
-                  {
-                    amount: roundedAmount,
-                    date: todayStr(),
-                    recordedBy: new mongoose.Types.ObjectId(req.user.id)
-                  }
-                ]
-              ]
-            }
-          }
-        }
-      ],
-      { returnDocument: "after", runValidators: true }
-    ).lean();
+    if (!sale) {
+      return res.status(404).json({ message: "Credit sale not found" });
+    }
 
-    if (!updated) {
-      const sale = await Sale.findById(id).lean();
-      if (!sale) return res.status(404).json({ message: "Credit sale not found" });
-      if (sale.saleType !== "credit") return res.status(400).json({ message: "This record is not a credit sale" });
-      if (sale.status === "paid") return res.status(400).json({ message: "This credit sale is already fully paid" });
-      if ((sale.amountDue || 0) <= 0) return res.status(400).json({ message: "This credit sale is already fully paid" });
+    if (sale.saleType !== "credit") {
+      return res.status(400).json({ message: "This record is not a credit sale" });
+    }
 
+    if (String(sale.branch || "").trim() !== userBranch) {
+      return res.status(403).json({
+        message: "This credit belongs to another branch and cannot be updated."
+      });
+    }
+
+    if (sale.status === "paid" || (sale.amountDue || 0) <= 0) {
+      return res.status(400).json({ message: "This credit sale is already fully paid" });
+    }
+
+    if (roundedAmount > sale.amountDue) {
       return res.status(400).json({
         message: `Payment of ${roundedAmount} exceeds remaining balance of ${sale.amountDue}. Overpayment is not allowed.`,
         amountDue: sale.amountDue
       });
     }
 
+    sale.amountDue = Math.round((sale.amountDue - roundedAmount) * 100) / 100;
+    sale.status = sale.amountDue <= 0 ? "paid" : "partial";
+    sale.paymentHistory = Array.isArray(sale.paymentHistory) ? sale.paymentHistory : [];
+    sale.paymentHistory.push({
+      amount: roundedAmount,
+      date: todayStr(),
+      recordedBy: new mongoose.Types.ObjectId(req.user.id)
+    });
+
+    await sale.save();
+
     const message =
-      updated.status === "paid"
+      sale.status === "paid"
         ? "Payment successful. Credit sale has been fully settled."
-        : `Payment of ${roundedAmount} received. Remaining balance: ${updated.amountDue}`;
+        : `Payment of ${roundedAmount} received. Remaining balance: ${sale.amountDue}`;
 
     return res.status(200).json({
       message,
-      status: updated.status,
-      amountDue: updated.amountDue,
-      data: updated
+      status: sale.status,
+      amountDue: sale.amountDue,
+      data: sale
     });
   } catch (error) {
     return res.status(500).json({ message: "Server error" });
