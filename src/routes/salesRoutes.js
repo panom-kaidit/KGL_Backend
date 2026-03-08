@@ -7,7 +7,8 @@ const Inventory = require("../models/Inventory");
 const { decreaseStock } = require("../services/inventoryService");
 const {
   getAgentDashboardSummary,
-  getSalesBreakdownSummary
+  getSalesBreakdownSummary,
+  getTotalCreditRevenue
 } = require("../controllers/salesController");
 
 const router = express.Router();
@@ -18,6 +19,12 @@ router.get(
   authMiddleware,
   authorizeRole(["Manager", "Director"]),
   getSalesBreakdownSummary
+);
+router.get(
+  "/summary/credit-revenue",
+  authMiddleware,
+  authorizeRole(["Director"]),
+  getTotalCreditRevenue
 );
 
 router.get("/history", authMiddleware, async (req, res) => {

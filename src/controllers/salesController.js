@@ -270,3 +270,70 @@ exports.getSalesBreakdownSummary = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
+
+exports.getTotalCreditRevenue = async (req, res) => {
+  try {
+    if (req.user.role !== "Director") {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const [result] = await Sale.aggregate([
+      { $match: { saleType: "credit" } },
+      {
+        $addFields: {
+          paymentHistoryTotal: {
+            $sum: {
+              $map: {
+                input: { $ifNull: ["$paymentHistory", []] },
+                as: "payment",
+                in: { $ifNull: ["$$payment.amount", 0] }
+              }
+            }
+          }
+        }
+      },
+      {
+        $addFields: {
+          creditTotalAmount: {
+            $let: {
+              vars: {
+                derivedTotal: {
+                  $add: [
+                    { $ifNull: ["$amountDue", 0] },
+                    { $ifNull: ["$paymentHistoryTotal", 0] }
+                  ]
+                }
+              },
+              in: {
+                $cond: [
+                  { $gt: ["$$derivedTotal", 0] },
+                  "$$derivedTotal",
+                  {
+                    $multiply: [
+                      { $ifNull: ["$tonnage", 0] },
+                      { $ifNull: ["$pricePerKg", 0] }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalCreditRevenue: { $sum: { $ifNull: ["$creditTotalAmount", 0] } },
+          totalCreditSales: { $sum: 1 }
+        }
+      }
+    ]);
+
+    return res.status(200).json({
+      totalCreditRevenue: Math.round(Number(result?.totalCreditRevenue || 0)),
+      totalCreditSales: Number(result?.totalCreditSales || 0)
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Server error" });
+  }
+};
