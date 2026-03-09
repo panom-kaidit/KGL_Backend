@@ -23,7 +23,7 @@ async function seedDirector() {
       profilePicture: ""
     });
 
-    console.log("✅ Default Director created");
+    console.log("Default Director created");
   } catch (error) {
     console.error("Seed error:", error);
   }
