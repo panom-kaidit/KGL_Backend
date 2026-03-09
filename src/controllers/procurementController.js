@@ -63,12 +63,12 @@ exports.createProcurement = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid product category" });
     }
 
-    if (!quantity || Number.isNaN(Number(quantity)) || Number(quantity) < 100) {
-      return res.status(400).json({ success: false, message: "Quantity must be at least 100" });
+    if (!quantity || Number.isNaN(Number(quantity)) || Number(quantity) < 1000) {
+      return res.status(400).json({ success: false, message: "Quantity must be at least 1000" });
     }
 
-    if (!unit_price || Number.isNaN(Number(unit_price)) || Number(unit_price) < 10000) {
-      return res.status(400).json({ success: false, message: "Unit price must be at least 10000" });
+    if (!unit_price || Number.isNaN(Number(unit_price)) || Number(unit_price) < 5) {
+      return res.status(400).json({ success: false, message: "Unit price must be at least 5" });
     }
 
     // 4) Calculate fallback selling total if frontend did not provide it
