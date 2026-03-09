@@ -23,7 +23,10 @@ router.post("/register", authMiddleware, async (req, res) => {
       return res.status(403).json({ message: "Access denied: only Directors and Managers can register users" });
     }
 
-    const { name, email, password, role, phone, bio } = req.body;
+    const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+    const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const password = typeof req.body.password === "string" ? req.body.password.trim() : "";
+    const { role, phone, bio } = req.body;
     let   { branch } = req.body;
 
     // Managers can only create Sales-agents for their own branch.
@@ -86,7 +89,8 @@ router.post("/register", authMiddleware, async (req, res) => {
 // ── POST /users/login ────────────────────────────────────────────────────────
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const password = typeof req.body.password === "string" ? req.body.password.trim() : "";
 
     if (!email || !password) {
       return res.status(400).json({ message: "email and password are required" });
@@ -166,6 +170,19 @@ router.put("/:id", authMiddleware, async (req, res) => {
         updateFields[field] = req.body[field];
       }
     });
+
+    if (req.body.password !== undefined) {
+      const trimmedPassword = String(req.body.password).trim();
+
+      if (trimmedPassword !== "") {
+        if (trimmedPassword.length < 8) {
+          return res.status(400).json({ message: "Password must be at least 8 characters" });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        updateFields.password = await bcrypt.hash(trimmedPassword, salt);
+      }
+    }
 
     if (updateFields.email) {
       updateFields.email = String(updateFields.email).trim().toLowerCase();
