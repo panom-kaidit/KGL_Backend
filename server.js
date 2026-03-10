@@ -66,7 +66,10 @@ const inventoryRoutes = require(path.join(__dirname, "src", "routes", "inventory
 const creditRoutes = require(path.join(__dirname, "src", "routes", "creditRoutes"));
 const pricingRoutes = require(path.join(__dirname, "src", "routes", "pricingRoutes"));
 
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get("/api-docs.json", (req, res) => {
+  res.json(swaggerSpec);
+});
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, { explorer: true }));
 app.use("/procurement", procurementRoutes);
 app.use("/sales", salesRoutes);
 app.use("/users", userRoutes);
